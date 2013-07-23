@@ -155,6 +155,56 @@ class YUMHelper(object):
         logger.info('Not found')
         return False
 
+class PIPHelper(object):
+    c_pip = 'pip'
+
+    @classmethod
+    def is_egg_installed(cls, dep):
+        if not getattr(cls, '_installed', None):
+            query = ClHelper.run_command(' '.join([cls.c_pip, 'list']))
+            cls._installed = query.split('\n')
+        search = filter(lambda e: e.startswith(dep + ' '), cls._installed)
+        return len(search) > 0
+
+    @classmethod
+    def resolve(cls, dep):
+        # based on https://github.com/ricobl/pip/commit/65627d71bea4a5f8efac01b535825e803845eee2
+        from pip.locations import build_prefix, src_prefix
+        from pip.index import PackageFinder
+        from pip.req import RequirementSet, InstallRequirement
+
+        finder =  PackageFinder(find_links=[],
+                                index_urls=['https://pypi.python.org/simple/'],
+                                use_mirrors=False,
+                                mirrors=[])
+        requirement_set = RequirementSet(
+            build_dir=os.path.abspath(build_prefix),
+            src_dir=os.path.abspath(src_prefix),
+            download_dir=None,
+            download_cache=None,
+            upgrade=False,
+            as_egg=False,
+            ignore_installed=True,
+            ignore_dependencies=False,
+            force_reinstall=True,
+            use_user_site=False)
+
+        requirement_set.add_requirement(
+            InstallRequirement.from_line(dep, None))
+
+        requirement_set.prepare_files(finder, force_root_egg_info=False, bundle=False)
+
+        requirements = '\n'.join(
+            ['%s==%s' % (req.name, req.installed_version) for req in
+                requirement_set.successfully_downloaded])
+
+        print requirements
+
+    @classmethod
+    def install(cls, *args):
+        ClHelper.run_command(' '.join([cls.c_pip, 'install', ' '.join(args)]))
+
+
 class PathHelper(object):
     c_cp = 'cp'
     c_mkdir = 'mkdir'

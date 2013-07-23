@@ -82,6 +82,7 @@ class DependenciesCommand(object):
         # see YamlAssistant.dependencies docstring to see what the structure looks like
         # collide rpm deps to install them in one shot, install them first
         rpm_deps = []
+        print struct
         for dep_dict in struct:
             for dep_t, dep_l in dep_dict.items():
                 if dep_t == 'rpm':
