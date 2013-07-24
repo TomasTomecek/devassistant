@@ -15,7 +15,7 @@ class ClHelper(object):
     @classmethod
     def run_command(cls, cmd_str, log_level=logging.DEBUG, scls=[]):
         """Runs a command from string, e.g. "cp foo bar" """
-
+        print cmd_str
         # format for scl execution if needed
         cmd_str = cls.format_for_scls(cmd_str, scls)
         logger.log(log_level, cmd_str, extra={'event_type': 'cmd_call'})
@@ -124,23 +124,14 @@ class YUMHelper(object):
 
     @classmethod
     def install(cls, *args):
-        try:
-            to_install = cls.resolve(*args)
-        except BaseException as e:
-            logger.error('Failed to resolve dependencies: {exc}'.format(exc=e))
-            return False
-        ret = DialogHelper.ask_for_confirm_with_message(prompt='Install following packages?',
-                                                        message='\n'.join(sorted(to_install)))
-        if ret is False:
-            return False
-
         cmd = ['pkexec', cls.c_yum, '-y', 'install']
-        quoted_pkgs = map(lambda pkg: '"{pkg}"'.format(pkg=pkg), to_install)
+        quoted_pkgs = map(lambda pkg: '"{pkg}"'.format(pkg=pkg), args)
         cmd.extend(quoted_pkgs)
         try:
             ClHelper.run_command(' '.join(cmd), log_level=logging.INFO)
             return args
-        except exceptions.ClException:
+        except exceptions.ClException as e:
+            print 'fail', e
             return False
 
     @classmethod
@@ -168,6 +159,7 @@ class PIPHelper(object):
 
     @classmethod
     def resolve(cls, dep):
+        """
         # based on https://github.com/ricobl/pip/commit/65627d71bea4a5f8efac01b535825e803845eee2
         from pip.locations import build_prefix, src_prefix
         from pip.index import PackageFinder
@@ -199,10 +191,19 @@ class PIPHelper(object):
                 requirement_set.successfully_downloaded])
 
         print requirements
+        """
+        return dep
 
     @classmethod
     def install(cls, *args):
-        ClHelper.run_command(' '.join([cls.c_pip, 'install', ' '.join(args)]))
+        cmd = ['pkexec', cls.c_pip, 'install']
+        quoted_pkgs = map(lambda pkg: '"{pkg}"'.format(pkg=pkg), args)
+        cmd.extend(quoted_pkgs)
+        try:
+            ClHelper.run_command(' '.join(cmd), log_level=logging.INFO)
+            return args
+        except exceptions.ClException:
+            return False
 
 
 class PathHelper(object):
