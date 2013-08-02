@@ -114,7 +114,6 @@ class YUMHelper(object):
         except ImportError:
             raise exceptions.CorePackagerMissing("yum can't be found, you are "
                 "probably running developer assistant in sandbox (virtualenv)")
-
         else:
             return True
 
