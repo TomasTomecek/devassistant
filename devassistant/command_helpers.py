@@ -102,7 +102,25 @@ class YUMHelper(object):
     c_yum = 'yum'
 
     @classmethod
+    def check_yum(cls):
+        """
+        check if yum is installed, return True if it is
+        I know this may sound trivial but in basic env created with virtualenv
+        as such `virtualenv ./env/`, you don't access to yum, because of
+        '--no-site-packages' being default option
+        """
+        try:
+            __import__('yum')
+        except ImportError:
+            raise exceptions.CorePackagerMissing("yum can't be found, you are "
+                "probably running developer assistant in sandbox (virtualenv)")
+
+        else:
+            return True
+
+    @classmethod
     def resolve(cls, *args):
+        cls.check_yum()
         logger.info('Resolving dependencies ...')
         import yum
         y = yum.YumBase()
@@ -138,7 +156,8 @@ class YUMHelper(object):
     def is_group_installed(cls, group):
         logger.info('Checking for presence of group {0}...'.format(group))
 
-        output = ClHelper.run_command(' '.join([cls.c_yum, 'group', 'list', '"{0}"'.format(group)]))
+        output = ClHelper.run_command(' '.join(
+            [cls.c_yum, 'group', 'list', '"{0}"'.format(group)]))
         if 'Installed Groups' in output:
             logger.info('Found %s', group)
             return True
@@ -146,11 +165,26 @@ class YUMHelper(object):
         logger.info('Not found')
         return False
 
+
 class PIPHelper(object):
     c_pip = 'pip'
 
     @classmethod
+    def check_pip(cls):
+        """ check if pip is installed, return True if it is """
+        try:
+            # this could be done via __import__('pip'), but since we are not
+            # using pip module
+            # TODO: this is problem in venv ^
+            ClHelper.run_command(' '.join([cls.c_pip]))
+        except exceptions.ClException:
+            raise exceptions.PackageManagerNotInstalled()
+        else:
+            return True
+
+    @classmethod
     def is_egg_installed(cls, dep):
+        cls.check_pip()
         if not getattr(cls, '_installed', None):
             query = ClHelper.run_command(' '.join([cls.c_pip, 'list']))
             cls._installed = query.split('\n')
@@ -196,6 +230,7 @@ class PIPHelper(object):
 
     @classmethod
     def install(cls, *args):
+        cls.check_pip()
         cmd = ['pkexec', cls.c_pip, 'install']
         quoted_pkgs = map(lambda pkg: '"{pkg}"'.format(pkg=pkg), args)
         cmd.extend(quoted_pkgs)
