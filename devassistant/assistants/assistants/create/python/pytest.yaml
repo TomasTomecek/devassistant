@@ -1,0 +1,27 @@
+pytest:
+  fullname: Pytest
+  description: 'Test assistant.'
+
+  dependencies:
+  - if $venv:
+    - rpm: [python-virtualenv]
+  - else:
+    # if changing, don't forget to also change these in run section in virtualenv installation
+    # this is not completely dry, but mapping of PyPI names to Fedora names would be a pain to do here
+    - rpm: [python-celery]
+    - pip: [numpy]
+
+  args:
+    name:
+      snippet: common_args
+
+  files:
+
+  run:
+  - $dirname: $(dirname "$name")
+  - $basename: $(basename "$name")
+  - if $(test -d "$name"):
+    - log_e: '$name already exists, cannot proceed.'
+  - cl: mkdir -p "$dirname"
+  - cl: mkdir -p "$basename"
+
