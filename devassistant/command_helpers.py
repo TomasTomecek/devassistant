@@ -173,10 +173,10 @@ class PIPHelper(object):
         """ check if pip is installed, return True if it is """
         try:
             # this could be done via __import__('pip'), but since we are not
-            # using pip module
-            # TODO: this is problem in venv ^
-            ClHelper.run_command(' '.join([cls.c_pip]))
+            # using pip module, we want to now if `pip` command is valid
+            ClHelper.run_command(cls.c_pip)
         except exceptions.ClException:
+            logger.warn("{0} is not installed".format(cls.c_pip))
             raise exceptions.PackageManagerNotInstalled()
         else:
             return True
@@ -184,6 +184,8 @@ class PIPHelper(object):
     @classmethod
     def is_egg_installed(cls, dep):
         cls.check_pip()
+        logger.info('Checking for presence of {0}...'.format(dep),
+                    extra={'event_type': 'dep_check'})
         if not getattr(cls, '_installed', None):
             query = ClHelper.run_command(' '.join([cls.c_pip, 'list']))
             cls._installed = query.split('\n')

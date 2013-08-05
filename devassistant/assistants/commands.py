@@ -18,7 +18,7 @@ from devassistant.command_helpers import ClHelper, DialogHelper, RPMHelper, YUMH
 from devassistant.logger import logger
 from devassistant import settings
 from devassistant import version
-from devassistant.package_manangers import DependencyInstaller
+from devassistant.package_managers import DependencyInstaller
 
 class ClCommand(object):
     @classmethod

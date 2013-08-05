@@ -7,6 +7,22 @@ from devassistant.logger import logger
 from devassistant import exceptions
 
 
+def list_managers():
+    """ return list of classes which represent package managers """
+    def identify_managers(x):
+        return x != PackageManager and isinstance(x, type) and \
+            issubclass(x, PackageManager)
+    # I admit that this is an absolutely insane hack but it's the simplest
+    # solution and easy to maintain (no need to store list of package
+    # managers somewhere)
+    return filter(identify_managers, globals().itervalues())
+
+
+def list_managers_shortcuts():
+    """ return list of shortcuts of package managers (e.g. ['rpm'])"""
+    return map(lambda x: x.shortcut, list_managers())
+
+
 class PackageManager(object):
     """ Abstract class for API definition of package managers """
 
@@ -53,10 +69,11 @@ class PackageManager(object):
 class RPMPackageManager(PackageManager):
     """ Package manager for managing rpm packages from repositories """
     permission_prompt = "Install following %(packages_text)s?"
+    shortcut = 'rpm'
 
     @classmethod
     def match(cls, dep_t):
-        return dep_t == 'rpm'
+        return dep_t == cls.shortcut
 
     @classmethod
     def get_perm_prompt(cls, plural=False):
@@ -71,11 +88,10 @@ class RPMPackageManager(PackageManager):
     def install_package_manager(cls):
         # yum is missing, user has to fix it
         raise exceptions.CorePackagerMissing("yum can't be found, you are "
-            "probably running developer assistant in sandbox (virtualenv)")
+            "probably running developer assistant in sandbox (virtualenv).")
 
     @classmethod
     def is_installed(cls, dep):
-        logger.info("Checking for presence of %s" % dep)
         if dep.startswith('@'):
             return YUMHelper.is_group_installed(dep)
         else:
@@ -92,10 +108,11 @@ class RPMPackageManager(PackageManager):
 class PIPPackageManager(PackageManager):
     """ Package manager for managing python dependencies from PyPI """
     permission_prompt = "Install following %(packages_text)s from PyPI?"
+    shortcut = 'pip'
 
     @classmethod
     def match(cls, dep_t):
-        return dep_t == 'pip'
+        return dep_t == cls.shortcut
 
     @classmethod
     def get_perm_prompt(cls, plural=False):
@@ -116,7 +133,6 @@ class PIPPackageManager(PackageManager):
 
     @classmethod
     def is_installed(cls, dep):
-        logger.info("Checking for presence of %s", dep)
         return PIPHelper.is_egg_installed(dep)
 
     @classmethod
@@ -138,74 +154,77 @@ class DependencyInstaller(object):
 
     def get_package_manager(self, dep_t):
         """ choose proper package manager and return it """
-        # I admit that this is absolutely insane hack but it's the simplest
-        # solution, also easy to maintain (no need to store list of package
-        # managers somewhere)
-        for glob in globals().itervalues():
-            if isinstance(glob, type) and issubclass(glob, PackageManager):
-                if glob.match(dep_t):
-                    return glob
+        for glob in list_managers():
+            if glob.match(dep_t):
+                return glob
         logger.error(
-            "Package manager for dependency type %s was not found" % dep_t)
+            "Package manager for dependency type {0} was not found".
+            format(dep_t))
         raise exceptions.PackageManagerNotFound(
             "Package manager for %s was not found." % dep_t)
 
-    def process_dependency(self, dep_t, dep_l):
+    def _process_dependency(self, dep_t, dep_l):
         """ Add entry into self.dependencies """
         PackageManagerClass = self.get_package_manager(dep_t)
         self.dependencies.setdefault(PackageManagerClass, [])
         self.dependencies[PackageManagerClass].extend(dep_l)
 
-    def ask_to_confirm(self, pac_man, *to_install):
+    def _ask_to_confirm(self, pac_man, *to_install):
         """ Return True if user wants to install packages, False otherwise """
         message = '\n'.join(sorted(to_install))
         ret = DialogHelper.ask_for_confirm_with_message(
-            # TODO make this personalisable in pac man classes
             prompt=pac_man.get_perm_prompt(len(to_install) > 1),
             message=message,
         )
         return False if ret is False else True
 
-    def check_dependencies(self, PackageManagerClass, deps):
+    def _check_dependencies(self, PackageManagerClass, deps):
         """ Check which deps are installed, return those who are not"""
         to_install = []
         for dep in deps:
             try:
                 is_installed = PackageManagerClass.is_installed(dep)
             except exceptions.PackageManagerNotInstalled:
-                pass
-            else:
-                if not is_installed:
-                    to_install.append(dep)
+                # this package manager is not present on system, install it!
+                di = DependencyInstaller()
+                di.install([{'rpm': ['python-pip']}])
+                is_installed = PackageManagerClass.is_installed(dep)
+            if not is_installed:
+                to_install.append(dep)
         return to_install
 
-    def install_dependencies(self):
+    def _install_dependencies(self):
         """ Install missing dependencies """
         for PackageManagerClass, deps in self.dependencies.iteritems():
-            to_install = self.check_dependencies(PackageManagerClass, deps)
+            to_install = self._check_dependencies(PackageManagerClass, deps)
             if not to_install:
                 # nothing to install, let's move on
                 continue
             try:
                 all_deps = PackageManagerClass.resolve(*to_install)
+            except exceptions.CorePackagerMissing as e:
+                logger.error(e.message)
+                raise
             except Exception as e:
-                logger.error('Failed to resolve dependencies: {exc}'.format(exc=e))
+                logger.error('Failed to resolve dependencies: {exc}'.
+                             format(exc=e))
                 continue
-            install = self.ask_to_confirm(PackageManagerClass, *all_deps)
+            install = self._ask_to_confirm(PackageManagerClass, *all_deps)
             if install:
                 installed = PackageManagerClass.install(*to_install)
                 logger.info("Successfully installed {0}".format(installed))
 
     def install(self, struct):
         """
-        Call this like `DependencyInstaller(struct)` and it will figure out
-        by itself which package manager to choose
+        Only method should be called from outside. Call it like
+        `DependencyInstaller(struct)` and it will figure out by itself which
+        package manager to choose
         """
         for dep_dict in struct:
             for dep_t, dep_l in dep_dict.items():
-                self.process_dependency(dep_t, dep_l)
+                self._process_dependency(dep_t, dep_l)
         if self.dependencies:
-            self.install_dependencies()
+            self._install_dependencies()
 
 
 def main():
